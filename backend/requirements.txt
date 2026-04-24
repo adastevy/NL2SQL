@@ -1,0 +1,10 @@
+# FastAPI 基础
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# 配置与环境变量
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+
+# SSE 流式响应
+sse-starlette==2.1.3

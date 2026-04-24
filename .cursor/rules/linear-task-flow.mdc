@@ -1,0 +1,177 @@
+---
+description: 用日常口语管理 Linear 任务 + 将 Markdown 计划同步为 Linear Todo
+alwaysApply: true
+---
+
+# Linear 任务流（口语指令 + 计划同步）
+
+## ⚙️ 配置区（按需修改）
+
+```yaml
+project:
+  name: "智能数据分析助理"          # Linear 项目名称
+  team: "NL2SQL"                        # Linear 团队 key（团队名：智能数据分析助理）
+  repo: "https://github.com/adastevy/NL2SQL.git"          # GitHub 仓库（owner/repo）
+  defaultAssignee: "344124240@qq.com"              # 默认负责人（me / 邮箱 / 用户名）
+  branchPrefix: "feat"               # 默认分支前缀：feat/fix/chore/docs/refactor
+
+sync:
+  mode: "twoLevel"                  # single=每个阶段建1个Issue；twoLevel=阶段作父Issue，子任务作子Issue（推荐）
+  includeAcceptance: true           # 是否把「验收标准」写入描述
+  statusOnCreate: "Todo"            # 新建 Issue 的初始状态
+  labels: ["plan-sync"]             # 自动附加的标签，不存在则自动创建
+  titlePrefix: ""                   # 可选，例如 "[NL2SQL] "
+```
+
+---
+
+## 一、口语指令模式
+
+只要用户消息里出现以下动词短语，立刻识别为"任务管理意图"，**无需额外确认**直接执行，完成后用简短中文告知结果 + Issue 链接（+ 建议分支）。
+
+| 用户口语 | 意图 | 执行 |
+|---|---|---|
+| "开始做 XXX" / "来做 XXX" / "开搞 XXX" | **开始** | 见【开始任务】 |
+| "完成了 XXX" / "XXX 搞定" / "做完了" | **完成** | 见【完成任务】 |
+| "暂停 XXX" / "XXX 卡住了" | **暂停** | 状态改 Backlog/Blocked + 写评论说明原因 |
+| "新建任务 XXX" / "加个 todo XXX" | **创建** | `save_issue` 创建，带默认 team/project/assignee |
+| "看看我的任务" / "我还有啥要做" | **查询列表** | `list_issues` 过滤 `assignee=me` + 未完成 |
+| "XXX 进展怎么样" | **查询单个** | `list_issues` 按关键字，返回状态 + URL |
+
+### 【开始任务】流程
+
+1. **定位 Issue**：`list_issues`（team/project + query=XXX）
+   - 1 条 → 直接用
+   - 多条 → 列候选让用户选
+   - 0 条 → `save_issue` 新建（title=XXX, team, project, assignee=defaultAssignee）
+2. **改状态**：`list_issue_statuses` 取 `type="started"` 状态（通常 `In Progress`）→ `save_issue(id, state, assignee)`
+3. **推荐分支**：`<prefix>/<issue-id-小写>-<英文短摘要>`
+   - 前缀推断：含「修/bug/fix」→ `fix`；含「文档/doc」→ `docs`；含「重构/refactor」→ `refactor`；含「杂项/chore」→ `chore`；其它 → 配置 `branchPrefix`
+   - 摘要：标题译为 ≤5 个英文单词，小写，`-` 连接
+4. **回复模板**：
+
+```
+已开始：[LEA-XX 标题](url)
+状态：Backlog → In Progress
+建议分支：<branch>
+
+git checkout -b <branch>
+```
+
+### 【完成任务】流程
+
+1. 定位 Issue：用户给的编号/关键字 → `list_issues`；或从当前分支名的 `lea-xx` 推断；推不出就问一句
+2. `list_issue_statuses` 取 `type="completed"`（通常 `Done`）→ `save_issue(id, state="Done")`
+3. 若用户有补充说明 → `save_comment` 记录
+4. 回复：`已完成：[LEA-XX 标题](url)，状态：In Progress → Done`，追问是否需要草拟 PR 描述
+
+---
+
+## 二、Markdown 计划同步模式
+
+### 触发条件（满足任一）
+
+1. 消息/文件中出现**至少 2 个连续编号的阶段标题**：`phase1 + phase2` 或 `阶段 1 + 阶段 2`（任意标题层级）
+2. 用户显式说：`同步到 Linear` / `同步计划` / `建成 todo` / `把计划发到 Linear`
+3. 用户引用 `.cursor/plans/*.plan.md` 并要求同步
+
+仅满足条件 1 而无显式指令时，**先问**：「检测到 N 个阶段，是否同步到 Linear 作为 Todo？」
+
+### 解析规则
+
+**第一级 Phase**（必选）：匹配 `Phase N` / `PHASE N:` / `阶段 N` / `阶段一` / `第 N 阶段`（大小写、空格、冒号宽松匹配），从该标题到下一同级 Phase 之间为"阶段正文"。
+
+**第二级 子任务组**（仅 `sync.mode=twoLevel`）：在阶段正文中识别：
+- `**子任务 X.Y ...**` / `### 子任务 X.Y`
+- `**后端任务**` / `**前端任务**` / `**任务清单**` / `**Tasks**`
+- 粗体短语 `**XXX**` 后紧跟无序列表（`- ...`）
+
+组下的 `- ` 列表作为该子 Issue 描述的正文。若阶段下无可识别子任务组，该阶段仅建 1 个 Issue（不报错）。
+
+### 执行流程（对每个 Phase，串行）
+
+1. **幂等查找**：`list_issues`（team=配置.team, project=配置.name, query="阶段 N"）→ 精确标题匹配
+   - 找到 → 走更新路径
+   - 未找到 → 走创建路径
+2. **父 Issue**：`save_issue`
+   - `title`：`{titlePrefix}阶段 N：<副标题>`
+   - 创建时必须带 `team`；其它字段：`project` / `assignee=defaultAssignee` / `labels=配置.labels` / `state=statusOnCreate`（仅创建时设）
+   - `description`：按下方模板组装
+3. **子 Issue**（twoLevel 模式）：对每个子任务组
+   - 同样 `list_issues` 幂等查找（query=组标题，本地按 parentId 过滤）
+   - `save_issue(parentId=父.id, title=组标题去星号, description=组下 bullet, ...)`
+4. **标签保障**（首次运行）：`list_issue_labels` 检查 `配置.labels`，缺失则 `create_issue_label`
+
+### 父 Issue 描述模板
+
+```markdown
+> 由 Cursor 规则 linear-task-flow 自动同步，请勿手工破坏标题格式。
+
+## 目标
+<抽取「**目标**」段落>
+
+## 范围
+<抽取「**后端任务**/**前端任务**/**任务清单**」等要点，聚合 3-8 个 bullet>
+
+## 验收标准（若 includeAcceptance=true）
+<抽取「**验收标准**」段落>
+
+---
+_source: <原计划路径 或 "chat-input">_
+_sync-at: <ISO-8601>_
+```
+
+### 回复模板（精简，不重述计划正文）
+
+```
+已同步 N 个阶段到 Linear：
+
+✓ 阶段 1：搭建前后端基础框架 → [LEA-10](url)（新建，3 个子任务）
+  └─ [LEA-11 后端任务](url)、[LEA-12 前端任务](url)、[LEA-13 验收](url)
+↻ 阶段 2：研发前端 UI → [LEA-7](url)（已存在，仅更新描述）
+```
+
+图例：`✓ 新建` / `↻ 更新` / `⊘ 跳过（已 Done）`
+
+---
+
+## 三、通用纪律
+
+### MCP 工具使用
+
+- **调用任何 Linear MCP 前，若不确定参数，先读 `mcps/user-Linear/tools/<tool>.json`**
+- `save_issue` 创建时必须带 `team`；更新只需 `id`
+- `description` / `body` 字符串用**真实换行**，不要 `\n` 转义
+- `parentId` 优先传 UUID，其次 identifier（如 `LEA-10`）
+- 批量创建**串行**调用，避免并发抢占 identifier
+
+### 明确不做
+
+- ❌ 不自动执行 `git checkout -b`（只推荐命令，让用户自己执行）
+- ❌ 不在没有明确触发词时主动更新 Linear
+- ❌ 不为每个无序列表项都建 Issue（粒度太碎）
+- ❌ 不删除 Linear 上已有但本次计划未出现的 Issue
+- ❌ 不覆盖用户手动改过的 Issue 状态（已 `In Progress`/`Done` 的只更新描述，除非用户明说）
+- ❌ 不把普通讨论里的"实现登录接口"误判为任务指令——那是编码请求，**正常写代码**，顺手在完成后提示"是否将 LEA-XX 标记为 Done？"
+
+---
+
+## 端到端示例
+
+**场景 A：口语开始任务**
+
+用户："开始做用户登录接口"
+→ `list_issues(query=登录)` 命中 `LEA-7` → `save_issue(id=LEA-7, state="In Progress")` → 回复：
+
+```
+已开始：[LEA-7 用户登录接口](url)
+状态：Backlog → In Progress
+建议分支：feat/lea-7-user-login-api
+
+git checkout -b feat/lea-7-user-login-api
+```
+
+**场景 B：同步计划**
+
+用户："把这份计划同步到 Linear"（引用包含 `阶段 1 / 阶段 2 / 阶段 3` 的 md）
+→ 解析 3 个 Phase + 各自子任务组 → 串行 `save_issue` 建父、建子 → 按汇总模板回复。
