@@ -35,3 +35,6 @@ ENV/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# ===== 本地一次性测试脚本（可能硬编码敏感信息） =====
+scripts/
