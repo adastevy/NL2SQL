@@ -7,9 +7,17 @@
 ## 当前进度
 
 - [x] **Phase 1：基础框架**（后端 `/api/ping` + 前端三栏骨架 + 双端启动）
-- [ ] Phase 2：前端 UI（Mock 驱动）
+- [x] **Phase 2：前端 UI**（Mock 驱动，三栏 UI + 流式气泡 + ECharts + 数据字典）
 - [ ] Phase 3：后端接口（LangChain SQL Agent + SSE）
 - [ ] Phase 4：前后端联调
+
+### Phase 2 亮点
+
+- `mocks/mockApi.ts` + `mocks/mockSSE.ts` 完整复刻 Phase 3 的 REST + SSE 契约，3 条预设问答（TOP10 艺人柱图 / 月度销售折线 / 流派占比饼图），逐字流式 + 五类事件推送。
+- Zustand 三仓：`useSessionStore` / `useChatStore` / `useChartStore`，会话切换与图表联动仅靠 store 消息流串起来。
+- 左栏 `SessionList`：搜索、新建、重命名、删除、激活高亮。
+- 中栏 `ChatPanel`：用户/助手气泡，助手气泡时间线式展示「思考过程（可折叠）/ SQL（高亮 + 复制）/ 数据预览（≤10 行）/ 最终回答」，支持「停止生成」。
+- 右栏 `ChartPanel`：`图表 / 数据表 / SQL` 三 Tab，顶部「数据字典」抽屉展示 Chinook Schema 与样本行。
 
 完整计划见 [`.cursor/plans/nl2sql_智能数据分析系统规划_3605e329.plan.md`](./.cursor/plans/nl2sql_%E6%99%BA%E8%83%BD%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90%E7%B3%BB%E7%BB%9F%E8%A7%84%E5%88%92_3605e329.plan.md)。
 

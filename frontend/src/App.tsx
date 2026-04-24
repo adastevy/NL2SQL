@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Badge, Button, Empty, Layout, Space, Tooltip, Typography } from 'antd'
+import { Badge, Button, Layout, Space, Tag, Tooltip, Typography } from 'antd'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
   DatabaseOutlined,
+  ExperimentOutlined,
   ReloadOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 
 import { ping, type PingResponse } from './api/client'
+import { SessionList } from './components/SessionList'
+import { ChatPanel } from './components/ChatPanel'
+import { ChartPanel } from './components/ChartPanel'
+import { useSessionStore } from './store/useSessionStore'
+import { useChatStore } from './store/useChatStore'
+import { useChartStore } from './store/useChartStore'
 
 const { Header, Sider, Content } = Layout
 const { Title, Text } = Typography
@@ -21,6 +28,11 @@ export default function App() {
   const [pong, setPong] = useState<PingResponse | null>(null)
   const [lastCheckedAt, setLastCheckedAt] = useState<string>('')
   const [errorMsg, setErrorMsg] = useState<string>('')
+
+  const loadSessions = useSessionStore((s) => s.loadSessions)
+  const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const loadMessages = useChatStore((s) => s.loadMessages)
+  const resetChart = useChartStore((s) => s.resetForSession)
 
   const checkBackend = async () => {
     setStatus('pending')
@@ -38,9 +50,18 @@ export default function App() {
     }
   }
 
+  // 首次挂载：拉会话 + ping
   useEffect(() => {
-    checkBackend()
-  }, [])
+    void loadSessions()
+    void checkBackend()
+  }, [loadSessions])
+
+  // 切换当前会话时：拉消息 + 重置图表状态
+  useEffect(() => {
+    if (!currentSessionId) return
+    void loadMessages(currentSessionId)
+    resetChart(currentSessionId)
+  }, [currentSessionId, loadMessages, resetChart])
 
   return (
     <Layout style={{ height: '100vh' }}>
@@ -61,8 +82,13 @@ export default function App() {
             NL2SQL 智能数据分析助理
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            Phase 1 · 基础框架
+            Phase 2 · 前端 UI (Mock 驱动)
           </Text>
+          <Tooltip title="当前为纯前端演示：所有数据来自 mocks/，不经过后端 LLM/SQL。">
+            <Tag icon={<ExperimentOutlined />} color="gold">
+              Mock 模式
+            </Tag>
+          </Tooltip>
         </Space>
 
         <Space size={12}>
@@ -82,83 +108,39 @@ export default function App() {
 
       <Layout>
         <Sider
-          width={260}
+          width={280}
           theme="light"
-          style={{ borderRight: '1px solid #f0f0f0', padding: 16 }}
+          style={{
+            borderRight: '1px solid #f0f0f0',
+            padding: 12,
+            display: 'flex',
+          }}
         >
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <Title level={5} style={{ margin: 0 }}>
-              会话列表
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              阶段 2 将在此实现新建 / 重命名 / 删除。
-            </Text>
-            <Empty
-              description="暂无会话"
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              style={{ marginTop: 40 }}
-            />
-          </Space>
+          <SessionList />
         </Sider>
 
         <Content
           style={{
-            padding: 24,
+            padding: 16,
+            background: '#f5f6fa',
             display: 'flex',
             flexDirection: 'column',
-            gap: 12,
-            background: '#f5f6fa',
+            minHeight: 0,
           }}
         >
-          <Title level={5} style={{ margin: 0 }}>
-            问答区
-          </Title>
-          <Text type="secondary">
-            阶段 2 将在此实现 SSE 流式气泡（思考过程 / SQL / 数据预览 / 最终回答）。
-          </Text>
-
-          <div
-            style={{
-              flex: 1,
-              background: '#fff',
-              border: '1px solid #f0f0f0',
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Empty description="等待提问" />
-          </div>
+          <ChatPanel />
         </Content>
 
         <Sider
-          width={480}
+          width={520}
           theme="light"
-          style={{ borderLeft: '1px solid #f0f0f0', padding: 16 }}
+          style={{
+            borderLeft: '1px solid #f0f0f0',
+            padding: 14,
+            display: 'flex',
+          }}
         >
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <Title level={5} style={{ margin: 0 }}>
-              图表展示
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              阶段 2 将在此实现 ECharts 图表 / 数据表 / SQL 三 Tab。
-            </Text>
-            <div
-              style={{
-                marginTop: 24,
-                height: 320,
-                background: '#fafafa',
-                border: '1px dashed #d9d9d9',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Empty description="图表占位" />
-            </div>
-          </Space>
+          <ChartPanel />
         </Sider>
       </Layout>
     </Layout>
@@ -203,7 +185,7 @@ function ConnectionBadge({ status, pong, errorMsg }: BadgeProps) {
   }
 
   return (
-    <Tooltip title={errorMsg || '无法连接到后端，请确认 uvicorn 是否已启动在 8000 端口'}>
+    <Tooltip title={errorMsg || '后端未启动或不可达，Phase 2 不影响本地 Mock 体验'}>
       <Space size={4}>
         <CloseCircleFilled style={{ color: '#ff4d4f' }} />
         <Text style={{ color: '#cf1322', fontWeight: 500 }}>后端未连接</Text>

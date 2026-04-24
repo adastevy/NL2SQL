@@ -25,3 +25,20 @@ body {
 * {
   box-sizing: border-box;
 }
+
+/* 助手流式气泡末尾的闪烁光标 */
+@keyframes nl2sql-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 让 AntD List 渲染紧凑些，方便会话列表 */
+.ant-list-empty-text {
+  padding: 8px !important;
+}
+
+/* 移除 AntD Tabs 顶部多余内边距 */
+.ant-tabs-nav {
+  margin-bottom: 8px !important;
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,24 +25,19 @@ class Settings(BaseSettings):
 
     db_path: str = Field(default="./app.db", description="SQLite 文件路径")
 
-    cors_origins: List[str] = Field(
-        default_factory=lambda: [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ],
-        description="允许的前端来源",
+    # 以字符串形式从 .env 读取，避免 pydantic-settings 把 CSV 当作 JSON 解析
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        description="允许的前端来源（英文逗号分隔）",
     )
 
     app_host: str = Field(default="0.0.0.0")
     app_port: int = Field(default=8000)
     log_level: str = Field(default="info")
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _split_origins(cls, v):
-        if isinstance(v, str):
-            return [x.strip() for x in v.split(",") if x.strip()]
-        return v
+    @property
+    def cors_origin_list(self) -> List[str]:
+        return [x.strip() for x in self.cors_origins.split(",") if x.strip()]
 
 
 @lru_cache
