@@ -9,8 +9,7 @@ import type {
   ChatMessage,
   UserMessage,
 } from '../types'
-import * as api from '../mocks/mockApi'
-import { runMockChat } from '../mocks/mockSSE'
+import * as api from '../api'
 import { useChartStore } from './useChartStore'
 
 interface ChatState {
@@ -47,7 +46,8 @@ function applyEvent(msg: AssistantMessage, event: ChatEvent): AssistantMessage {
     case 'chart':
       return { ...msg, meta: { ...meta, chart: event.chart } }
     case 'final':
-      return { ...msg, meta: { ...meta, final: (meta.final ?? '') + event.delta } }
+      // 后端 §3.4.6：`final` 在 Agent 结束后一次性推送完整文本，覆盖任何中间态
+      return { ...msg, meta: { ...meta, final: event.delta } }
     case 'done':
       return { ...msg, meta: { ...meta, status: 'done', finishedAt: nowIso() } }
     case 'error':
@@ -148,15 +148,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     try {
-      // 该索引根据当前该会话的轮次计算（第 N 次发问兜底到第 N 个样例）
-      const roundIndex =
-        (get().messagesBySession[sessionId]?.filter((m) => m.role === 'user').length ?? 1) - 1
-
-      await runMockChat({
+      await api.runChat({
+        sessionId,
         question: trimmed,
         onEvent,
         signal: controller.signal,
-        fallbackIndex: Math.max(0, roundIndex),
       })
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {

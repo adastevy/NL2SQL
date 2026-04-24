@@ -1,11 +1,12 @@
 /**
  * 会话列表状态：sessions、currentSessionId、CRUD。
- * 数据源当前走 mocks/mockApi；Phase 4 替换为 api/sessions.ts 即可。
+ *
+ * 数据源走 `api` 统一出口，由 `VITE_USE_MOCK` 环境变量决定指向 mock 还是真实后端。
  */
 import { create } from 'zustand'
 
 import type { Session } from '../types'
-import * as api from '../mocks/mockApi'
+import * as api from '../api'
 
 interface SessionState {
   sessions: Session[]

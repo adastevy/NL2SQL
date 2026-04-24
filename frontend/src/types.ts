@@ -1,5 +1,9 @@
 /**
- * 全局类型定义：前端三栏 UI + Mock + 未来真实 API 共用。
+ * 全局类型定义：前端三栏 UI + Mock + 真实 API 共用。
+ *
+ * 所有可空字段使用 `string | null | undefined` 以同时兼容：
+ * - 后端 Pydantic 对可选字段序列化为 `null`
+ * - Mock 数据里用 `undefined` 表示「未提供」
  */
 
 // ============ 会话 ============
@@ -9,7 +13,8 @@ export interface Session {
   title: string
   createdAt: string // ISO
   updatedAt: string // ISO
-  preview?: string
+  /** 后端在无最近问题时返回 null；前端 mock 可能不提供 */
+  preview?: string | null
 }
 
 // ============ 查询结果 & 图表 ============
@@ -31,7 +36,8 @@ export type EChartsOption = Record<string, unknown>
 export interface ChartPayload {
   chartType: ChartType
   echartsOption: EChartsOption
-  insight?: string
+  /** 后端图表生成失败或未生成洞察时为 null */
+  insight?: string | null
 }
 
 // ============ 聊天消息 ============
@@ -41,15 +47,16 @@ export type MessageRole = 'user' | 'assistant'
 export type AssistantStatus = 'streaming' | 'done' | 'error' | 'aborted'
 
 export interface AssistantMeta {
-  thought?: string
-  sql?: string
-  data?: QueryResult
-  chart?: ChartPayload
-  final?: string
+  thought?: string | null
+  sql?: string | null
+  data?: QueryResult | null
+  chart?: ChartPayload | null
+  /** 最终答案：后端 SSE 在 Agent 结束后仅推送一次完整内容 */
+  final?: string | null
   status: AssistantStatus
-  error?: string
+  error?: string | null
   startedAt: string
-  finishedAt?: string
+  finishedAt?: string | null
 }
 
 export interface UserMessage {
@@ -71,6 +78,12 @@ export interface AssistantMessage {
 export type ChatMessage = UserMessage | AssistantMessage
 
 // ============ SSE 事件协议 ============
+//
+// 注：后端 §3.4.6 规定：
+//   - `thought` 流式推送（增量累加）
+//   - `sql` / `data` / `chart` 覆盖式一次性推送
+//   - `final` **仅在 Agent 全部结束后推送一次完整文本**（非增量）
+//   - `done` / `error` 为终结事件
 
 export type ChatEvent =
   | { type: 'thought'; delta: string }
@@ -88,13 +101,13 @@ export type ChatEventHandler = (event: ChatEvent) => void
 export interface SchemaColumn {
   name: string
   type: string
-  nullable?: boolean
-  comment?: string
+  nullable?: boolean | null
+  comment?: string | null
 }
 
 export interface SchemaTable {
   name: string
-  comment?: string
+  comment?: string | null
   columns: SchemaColumn[]
   sampleRows: Primitive[][]
 }

@@ -8,8 +8,6 @@ import { pickMockSample } from './mockData'
 
 /** 每段思考文字的逐字速度（毫秒/字） */
 const THOUGHT_CHAR_INTERVAL_MS = 18
-/** 每段最终回答的逐字速度（毫秒/字） */
-const FINAL_CHAR_INTERVAL_MS = 22
 /** 各大阶段之间的间隔 */
 const STAGE_GAP_MS = 220
 /** 思考段落之间的间隔 */
@@ -33,9 +31,8 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-async function emitStream(
+async function emitThoughtStream(
   text: string,
-  type: 'thought' | 'final',
   emit: ChatEventHandler,
   signal: AbortSignal | undefined,
   intervalMs: number,
@@ -44,7 +41,7 @@ async function emitStream(
   const chunkSize = 2
   for (let i = 0; i < text.length; i += chunkSize) {
     const delta = text.slice(i, i + chunkSize)
-    emit({ type, delta })
+    emit({ type: 'thought', delta })
     await wait(intervalMs, signal)
   }
 }
@@ -68,9 +65,9 @@ export async function runMockChat(options: RunMockChatOptions): Promise<void> {
   try {
     await wait(STAGE_GAP_MS, signal)
 
-    // 1) thought：逐段流式
+    // 1) thought：逐段流式（增量累加）
     for (const para of sample.thoughtSteps) {
-      await emitStream(para + '\n', 'thought', onEvent, signal, THOUGHT_CHAR_INTERVAL_MS)
+      await emitThoughtStream(para + '\n', onEvent, signal, THOUGHT_CHAR_INTERVAL_MS)
       await wait(PARAGRAPH_GAP_MS, signal)
     }
     await wait(STAGE_GAP_MS, signal)
@@ -84,7 +81,8 @@ export async function runMockChat(options: RunMockChatOptions): Promise<void> {
     onEvent({ type: 'chart', chart: sample.chart })
     await wait(STAGE_GAP_MS, signal)
 
-    await emitStream(sample.final, 'final', onEvent, signal, FINAL_CHAR_INTERVAL_MS)
+    // 2) final：与真实后端 §3.4.6 对齐，Agent 结束后一次性推送完整文本
+    onEvent({ type: 'final', delta: sample.final })
     onEvent({ type: 'done' })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
@@ -99,7 +97,6 @@ export async function runMockChat(options: RunMockChatOptions): Promise<void> {
 /** 便于测试：导出常量供 UI 展示文案使用 */
 export const MOCK_SSE_TIMING = {
   THOUGHT_CHAR_INTERVAL_MS,
-  FINAL_CHAR_INTERVAL_MS,
   STAGE_GAP_MS,
   PARAGRAPH_GAP_MS,
 }

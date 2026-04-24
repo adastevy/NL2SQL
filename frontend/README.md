@@ -1,78 +1,137 @@
-# NL2SQL Agent - Frontend
+# NL2SQL Agent · Frontend
 
-基于 Vite + React 19 + TypeScript + Ant Design 5 + ECharts + Zustand 的单页前端。
+基于 **React 19 + Vite + TypeScript + Ant Design 5 + ECharts + Zustand** 的智能数据分析前端。
 
-- Phase 1：三栏 Layout 骨架 + `/api/ping` 连通性展示
-- **Phase 2（当前）**：Mock 驱动的完整交互：三栏 UI + 流式气泡 + ECharts 渲染 + 数据字典
+三栏布局：左栏会话列表，中栏聊天（SSE 流式），右栏图表 + 数据字典抽屉。
+
+---
 
 ## 运行环境
 
-- Node.js 18+（推荐 20+）
-- npm 9+
+- Node.js **20+**（建议 20 LTS）
+- npm 10+
 
-## 首次安装
+---
+
+## 首次安装 & 启动
 
 ```powershell
 cd frontend
 npm install
+# 可选：复制环境变量示例
+Copy-Item .env.example .env.local
+npm run dev -- --host localhost
 ```
 
-## 启动
+然后访问 <http://localhost:5173>。
+
+> **注意**：Vite 默认绑 IPv6 的 `[::1]`，用 `localhost` 或 `http://localhost:5173` 访问比 `127.0.0.1` 稳。
+
+---
+
+## Mock ↔ Real 一键切换
+
+前端有两套数据源实现，**通过环境变量切换**，不需改任何源码：
+
+| `VITE_USE_MOCK` | 行为 | 何时用 |
+| :--- | :--- | :--- |
+| `true` | 完全走 `src/mocks/*`，不碰后端 | 无 Key / 纯 UI 演示 / CI 冒烟 |
+| `false`（默认） | 走 `src/api/*` → Vite 代理 → `/api/*` → FastAPI | 正常联调和上线 |
+
+实现位置：所有 store / 组件只 `import * as api from '../api'`，`src/api/index.ts` 是分发
+器，根据 `import.meta.env.VITE_USE_MOCK` 决定绑定到 mock 还是 real。
+
+页面顶部会实时展示当前模式（"Mock 模式 / 真实模式"）。
 
 ```powershell
-npm run dev
+# 临时一次性（推荐）
+$env:VITE_USE_MOCK='true'; npm run dev
+# 或写到 .env.local
+echo 'VITE_USE_MOCK=true' >> .env.local
 ```
 
-浏览器打开 <http://localhost:5173>，Header 绿色「后端已连接 ✓」即表示与 FastAPI 联通正常。
+---
 
-> 开发态下 `/api/*` 请求会被 Vite 代理到 `http://localhost:8000`，见 `vite.config.ts`。
+## 代理 & 后端地址
 
-## 目录结构（Phase 2）
+`vite.config.ts` 把 `/api/**` 代理到 `VITE_BACKEND_URL`（默认 `http://127.0.0.1:8000`）。
+代理会强制去掉上游 SSE 缓冲（`X-Accel-Buffering: no`），保证 `/api/chat` 事件逐条下发。
 
-```
-frontend/
-├── src/
-│   ├── api/
-│   │   └── client.ts              # axios 实例 + ping()（后续接 sessions / schema / chat）
-│   ├── components/
-│   │   ├── SessionList/           # 左栏：搜索 / 新建 / 重命名 / 删除 / 激活高亮
-│   │   ├── ChatPanel/             # 中栏：MessageList + StreamingBubble + ChatInput
-│   │   └── ChartPanel/            # 右栏：Tabs[图表/数据表/SQL] + SchemaDrawer
-│   ├── mocks/
-│   │   ├── mockData.ts            # 3 条预设样例 + Chinook Schema + 建议问法
-│   │   ├── mockApi.ts             # sessions CRUD / fetchMessages / fetchSchema（300ms 延时）
-│   │   └── mockSSE.ts             # runMockChat：按节奏发射 thought/sql/data/chart/final
-│   ├── store/
-│   │   ├── useSessionStore.ts
-│   │   ├── useChatStore.ts        # 负责编排 SSE 消费
-│   │   └── useChartStore.ts
-│   ├── types.ts                   # 全局类型（Session / ChatMessage / ChatEvent / Schema ...）
-│   ├── App.tsx                    # 三栏 Layout + Header
-│   ├── App.css
-│   ├── index.css                  # 全局重置 + 流式光标动画
-│   └── main.tsx                   # AntD ConfigProvider（zh_CN）+ AntdApp
-├── index.html
-├── vite.config.ts                 # /api 代理（含 SSE 禁缓冲）
-├── tsconfig.*.json
-└── package.json
+如果后端跑在远程机器或别的端口：
+
+```powershell
+# .env.local
+VITE_BACKEND_URL=http://192.168.1.100:8000
 ```
 
-## 契约先行策略
+---
 
-- `mocks/mockApi.ts` 与 `mocks/mockSSE.ts` 的对外函数签名 = 未来真实 `api/sessions.ts` + `api/chat.ts` 的签名，Phase 4 只需替换 import 源即可完成联调。
-- `types.ts` 为前后端共用的数据结构（`ChatEvent` 判别联合、`QueryResult`、`ChartPayload`），后端 SSE payload 将严格对齐。
+## 目录结构
 
-## 预设样例
+```
+frontend/src/
+├── api/                  # ★ 真实后端客户端（Phase 4）
+│   ├── client.ts         # axios 实例 + ping
+│   ├── sessions.ts       # REST: CRUD + 历史消息（含后端 → 前端适配）
+│   ├── schema.ts         # REST: 数据字典
+│   ├── chat.ts           # SSE: runChat（@microsoft/fetch-event-source）
+│   └── index.ts          # ★ mock↔real 分发层（VITE_USE_MOCK 开关）
+├── mocks/                # 离线演示实现（Phase 2 沉淀，不删）
+│   ├── mockApi.ts
+│   ├── mockData.ts
+│   └── mockSSE.ts
+├── store/                # Zustand
+│   ├── useSessionStore.ts
+│   ├── useChatStore.ts   # ★ 消费 SSE 事件的核心状态机
+│   └── useChartStore.ts
+├── components/
+│   ├── SessionList/      # 左栏：会话 CRUD
+│   ├── ChatPanel/        # 中栏：消息 + 建议问法 + Composer
+│   └── ChartPanel/       # 右栏：ECharts + Schema 抽屉
+├── types.ts              # ★ 与后端 DTO 严格对齐（camelCase）
+├── App.tsx
+└── main.tsx
+```
 
-在新会话中依次发送以下问题，可分别看到三种图表与 SSE 流：
+---
 
-1. `销售额 TOP10 的艺人是谁？` → 柱状图
-2. `帮我画一个最近 12 个月的销售折线图` → 折线图
-3. `各流派销售额占比如何？用饼图展示` → 环形饼图
+## SSE 事件模型（对前端的硬约束）
 
-关键词匹配失败时会按当前会话轮次兜底轮播三个样例。
+消费 `/api/chat` 时 `useChatStore.applyEvent` 遵循：
 
-## 后续阶段
+| 事件 | 累加 or 覆盖 | 何处呈现 |
+| :--- | :--- | :--- |
+| `thought` | **增量拼接** | 思考气泡（灰色小字） |
+| `sql` | **覆盖**（最终 SQL 一次到位） | SQL 代码块 |
+| `data` | **覆盖** | 数据表 / ECharts 数据源 |
+| `chart` | **覆盖** | 右栏 ECharts 图表 |
+| `final` | **一次性完整覆盖**（不拼接！） | 最终回答文本 |
+| `done` | 结束 | 关闭 loading |
+| `error` | 结束 + 报错 | Alert |
 
-- Phase 3：后端接口按契约落地（LangChain SQL Agent + Qwen3 + SSE）
-- Phase 4：替换 `mocks/*` 为真实 API，完成端到端验收
+> 为什么 `final` 是覆盖而不是拼接？后端为了防 Qwen3 的 ReAct 把"中间思考 SQL"误当成答
+> 案流出来（会造成"答案闪烁"），会缓冲到 agent 全部跑完再一次性 flush。`final` 全程只
+> 触发一次。
+
+详细契约参见 [`.cursor/plans/...plan.md` §3.5](../.cursor/plans/)。
+
+---
+
+## 构建
+
+```powershell
+npm run build     # tsc -b && vite build → dist/
+npm run preview   # 本地预览产物
+npm run lint      # ESLint（CI 必过）
+```
+
+---
+
+## 常见问题
+
+- **控制台报 `[antd: compatible] ...React 19`**：Ant Design v5 官方对 React 19 标"软兼
+  容"，功能不受影响，等 AntD v6 完全适配即可关闭。
+- **网络面板看到 `/api/chat` 一直在 pending 却没事件**：八成是代理层缓冲了 SSE。确认
+  `vite.config.ts` 里 `X-Accel-Buffering=no` 没丢；生产部署 Nginx 的话也要配同名头。
+- **切换到真实模式后会话消失**：因为 mock 模式的会话存在 localStorage，真实模式存后端
+  数据库。两套互不干扰，切回去数据还在。

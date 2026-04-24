@@ -16,7 +16,7 @@ import {
 import { DatabaseOutlined } from '@ant-design/icons'
 
 import type { SchemaTable } from '../../types'
-import { fetchSchema } from '../../mocks/mockApi'
+import { fetchSchema } from '../../api'
 
 const { Text } = Typography
 
@@ -33,6 +33,7 @@ export function SchemaDrawer({ open, onClose }: Props) {
   useEffect(() => {
     if (!open) return
     if (tables) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 抽屉打开时触发一次性拉取
     setLoading(true)
     fetchSchema()
       .then(setTables)
@@ -46,7 +47,7 @@ export function SchemaDrawer({ open, onClose }: Props) {
         <Space>
           <DatabaseOutlined />
           <span>数据字典</span>
-          <Tag color="blue">Chinook (Mock)</Tag>
+          <Tag color="blue">Chinook</Tag>
         </Space>
       }
       width={520}

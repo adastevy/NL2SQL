@@ -10,7 +10,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 
-import { ping, type PingResponse } from './api/client'
+import { USE_MOCK, ping, type PingResponse } from './api'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
 import { ChartPanel } from './components/ChartPanel'
@@ -53,6 +53,7 @@ export default function App() {
   // 首次挂载：拉会话 + ping
   useEffect(() => {
     void loadSessions()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 初始化时同步 setStatus('pending') 可接受
     void checkBackend()
   }, [loadSessions])
 
@@ -82,11 +83,17 @@ export default function App() {
             NL2SQL 智能数据分析助理
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            Phase 2 · 前端 UI (Mock 驱动)
+            {USE_MOCK ? 'Phase 2 · Mock 驱动' : 'Phase 4 · 真实后端（Qwen3 + LangChain）'}
           </Text>
-          <Tooltip title="当前为纯前端演示：所有数据来自 mocks/，不经过后端 LLM/SQL。">
-            <Tag icon={<ExperimentOutlined />} color="gold">
-              Mock 模式
+          <Tooltip
+            title={
+              USE_MOCK
+                ? '当前为纯前端演示：所有数据来自 mocks/，不经过后端 LLM/SQL。'
+                : '当前已连接真实后端：问答走 /api/chat SSE 流式，由 LangChain SQL Agent + Qwen3 生成。'
+            }
+          >
+            <Tag icon={<ExperimentOutlined />} color={USE_MOCK ? 'gold' : 'geekblue'}>
+              {USE_MOCK ? 'Mock 模式' : '真实模式'}
             </Tag>
           </Tooltip>
         </Space>
